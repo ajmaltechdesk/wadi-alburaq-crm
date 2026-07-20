@@ -22,9 +22,16 @@ service firebase.storage {
 
     // Client documents: clients/{clientId}/{fileName}
     match /clients/{clientId}/{fileName} {
-      allow read, write: if isManagerOrAdmin() || ownsClient(clientId);
-      // 20 MB max, safe content types
-      allow write: if request.resource.size < 20 * 1024 * 1024;
+      allow read: if isManagerOrAdmin() || ownsClient(clientId);
+      // Write requires ownership AND a 20 MB size cap AND a safe content type.
+      // All conditions are in ONE statement — multiple `allow write` lines are
+      // OR-combined, so a size-only line would grant write to everyone.
+      allow write: if (isManagerOrAdmin() || ownsClient(clientId))
+        && request.resource.size < 20 * 1024 * 1024
+        && request.resource.contentType.matches(
+             'application/pdf|image/.*|application/msword|application/vnd.*|text/plain'
+           );
+      allow delete: if isManagerOrAdmin() || ownsClient(clientId);
     }
 
     match /{allPaths=**} {

@@ -38,12 +38,17 @@ service cloud.firestore {
 
     // ---------- Users ----------
     match /users/{uid} {
-      // Everyone signed-in can read basic profiles (needed for names/assignment lists)
-      allow read: if signedIn();
-      // Only admins create/delete users; users may not change their own role
+      // Managers/admins need the team directory; a plain user can only read
+      // their own profile. Employees never read other staff records.
+      allow read: if isManagerOrAdmin() || request.auth.uid == uid;
+      // Only admins create/delete users.
       allow create, delete: if isAdmin();
       allow update: if isAdmin()
-        || (isManagerOrAdmin() && request.resource.data.role == resource.data.role)
+        // Managers may edit EMPLOYEE profiles only, and can never grant a role.
+        || (isManager()
+            && resource.data.role == 'employee'
+            && request.resource.data.role == 'employee')
+        // A user may edit their own profile but not their role, status or target.
         || (signedIn() && request.auth.uid == uid
             && request.resource.data.role == resource.data.role
             && request.resource.data.status == resource.data.status
@@ -103,7 +108,11 @@ service cloud.firestore {
       allow read: if isManagerOrAdmin()
         || (isEmployee() && (resource.data.assignedTo == request.auth.uid
                              || resource.data.createdBy == request.auth.uid));
-      allow create: if signedIn() && isActive();
+      // Managers/admins may assign to anyone; employees only to themselves.
+      allow create: if isManagerOrAdmin()
+        || (isEmployee()
+            && request.resource.data.assignedTo == request.auth.uid
+            && request.resource.data.createdBy == request.auth.uid);
       allow update, delete: if isManagerOrAdmin()
         || (isEmployee() && (resource.data.assignedTo == request.auth.uid
                              || resource.data.createdBy == request.auth.uid));
@@ -123,7 +132,10 @@ service cloud.firestore {
     // ---------- Notifications ----------
     match /notifications/{id} {
       allow read, update: if signedIn() && resource.data.userId == request.auth.uid;
-      allow create: if signedIn() && isActive();
+      // Users may notify themselves; only managers/admins may notify others
+      // (e.g. on client assignment). Prevents spoofed cross-user notifications.
+      allow create: if signedIn() && isActive()
+        && (request.resource.data.userId == request.auth.uid || isManagerOrAdmin());
       allow delete: if signedIn() && resource.data.userId == request.auth.uid;
     }
 
@@ -131,8 +143,10 @@ service cloud.firestore {
     match /auditLogs/{id} {
       allow read: if isManagerOrAdmin()
         || (isEmployee() && resource.data.userId == request.auth.uid);
+      // Own userId, and the logged role must match the real role (no spoofing).
       allow create: if signedIn() && isActive()
-        && request.resource.data.userId == request.auth.uid;
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.role == role();
       allow update, delete: if false; // immutable trail
     }
 

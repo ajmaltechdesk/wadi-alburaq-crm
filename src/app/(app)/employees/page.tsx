@@ -125,6 +125,19 @@ export default function EmployeesPage() {
     }
   };
 
+  // Employees may not view the team page (defense-in-depth; Firestore rules
+  // also deny reading the staff directory to non-managers).
+  if (profile && profile.role === "employee") {
+    return (
+      <div className="card">
+        <EmptyState
+          title="Access restricted"
+          hint="The team page is available to managers and administrators only."
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="animate-fade-up space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
