@@ -1,0 +1,145 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Helpers ----------
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function role() {
+      return userDoc().role;
+    }
+
+    function isActive() {
+      return userDoc().status == 'active';
+    }
+
+    function isAdmin() {
+      return signedIn() && role() == 'admin' && isActive();
+    }
+
+    function isManager() {
+      return signedIn() && role() == 'manager' && isActive();
+    }
+
+    function isManagerOrAdmin() {
+      return isAdmin() || isManager();
+    }
+
+    function isEmployee() {
+      return signedIn() && role() == 'employee' && isActive();
+    }
+
+    // ---------- Users ----------
+    match /users/{uid} {
+      // Everyone signed-in can read basic profiles (needed for names/assignment lists)
+      allow read: if signedIn();
+      // Only admins create/delete users; users may not change their own role
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+        || (isManagerOrAdmin() && request.resource.data.role == resource.data.role)
+        || (signedIn() && request.auth.uid == uid
+            && request.resource.data.role == resource.data.role
+            && request.resource.data.status == resource.data.status
+            && request.resource.data.monthlyTarget == resource.data.monthlyTarget);
+    }
+
+    // ---------- Counters (client code sequence) ----------
+    match /counters/{counterId} {
+      allow read, write: if signedIn() && isActive();
+    }
+
+    // ---------- Clients: THE core isolation rule ----------
+    // Employees can only read/write clients assigned to them.
+    // Queries from employees MUST filter assignedEmployeeId == uid or they will be rejected.
+    match /clients/{clientId} {
+      allow read: if isManagerOrAdmin()
+        || (isEmployee() && resource.data.assignedEmployeeId == request.auth.uid);
+
+      allow create: if isManagerOrAdmin()
+        || (isEmployee() && request.resource.data.assignedEmployeeId == request.auth.uid);
+
+      // Employees may update their own clients but can never reassign them
+      allow update: if isManagerOrAdmin()
+        || (isEmployee()
+            && resource.data.assignedEmployeeId == request.auth.uid
+            && request.resource.data.assignedEmployeeId == request.auth.uid);
+
+      allow delete: if isAdmin();
+
+      // Requirements — inherit client assignment
+      match /requirements/{reqId} {
+        allow read, write: if isManagerOrAdmin()
+          || (isEmployee()
+              && get(/databases/$(database)/documents/clients/$(clientId)).data.assignedEmployeeId == request.auth.uid);
+      }
+
+      // Documents metadata — inherit client assignment
+      match /documents/{docId} {
+        allow read, write: if isManagerOrAdmin()
+          || (isEmployee()
+              && get(/databases/$(database)/documents/clients/$(clientId)).data.assignedEmployeeId == request.auth.uid);
+      }
+    }
+
+    // ---------- Follow-ups ----------
+    match /followups/{id} {
+      allow read: if isManagerOrAdmin()
+        || (isEmployee() && resource.data.assignedEmployeeId == request.auth.uid);
+      allow create: if isManagerOrAdmin()
+        || (isEmployee() && request.resource.data.assignedEmployeeId == request.auth.uid);
+      allow update, delete: if isManagerOrAdmin()
+        || (isEmployee() && resource.data.assignedEmployeeId == request.auth.uid);
+    }
+
+    // ---------- Tasks ----------
+    match /tasks/{id} {
+      allow read: if isManagerOrAdmin()
+        || (isEmployee() && (resource.data.assignedTo == request.auth.uid
+                             || resource.data.createdBy == request.auth.uid));
+      allow create: if signedIn() && isActive();
+      allow update, delete: if isManagerOrAdmin()
+        || (isEmployee() && (resource.data.assignedTo == request.auth.uid
+                             || resource.data.createdBy == request.auth.uid));
+    }
+
+    // ---------- Sales ----------
+    match /sales/{id} {
+      allow read: if isManagerOrAdmin()
+        || (isEmployee() && resource.data.assignedEmployeeId == request.auth.uid);
+      allow create: if isManagerOrAdmin()
+        || (isEmployee() && request.resource.data.assignedEmployeeId == request.auth.uid);
+      allow update: if isManagerOrAdmin()
+        || (isEmployee() && resource.data.assignedEmployeeId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Notifications ----------
+    match /notifications/{id} {
+      allow read, update: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create: if signedIn() && isActive();
+      allow delete: if signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // ---------- Audit logs (append-only) ----------
+    match /auditLogs/{id} {
+      allow read: if isManagerOrAdmin()
+        || (isEmployee() && resource.data.userId == request.auth.uid);
+      allow create: if signedIn() && isActive()
+        && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false; // immutable trail
+    }
+
+    // ---------- Settings ----------
+    match /settings/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+  }
+}

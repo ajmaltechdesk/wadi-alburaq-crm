@@ -1,0 +1,34 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isManagerOrAdmin() {
+      return signedIn() && userDoc().role in ['admin', 'manager'] && userDoc().status == 'active';
+    }
+
+    function ownsClient(clientId) {
+      return signedIn()
+        && firestore.get(/databases/(default)/documents/clients/$(clientId)).data.assignedEmployeeId == request.auth.uid;
+    }
+
+    // Client documents: clients/{clientId}/{fileName}
+    match /clients/{clientId}/{fileName} {
+      allow read, write: if isManagerOrAdmin() || ownsClient(clientId);
+      // 20 MB max, safe content types
+      allow write: if request.resource.size < 20 * 1024 * 1024;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
