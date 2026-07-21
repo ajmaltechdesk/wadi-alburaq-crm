@@ -3,15 +3,22 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Download, Plus, SlidersHorizontal } from "lucide-react";
+import { Download, Plus, SlidersHorizontal, Upload } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { fetchClients, fetchUsers } from "@/lib/data";
 import { exportCSV } from "@/lib/export";
 import type { Client, UserProfile } from "@/lib/types";
 import { CLIENT_STATUSES, LEAD_SOURCES, NATIONALITIES, PRIORITIES } from "@/lib/constants";
 import { fmtDate, initials } from "@/lib/utils";
+import dynamic from "next/dynamic";
 import { Button, EmptyState, Pagination, SearchBox, Select, TableSkeleton } from "@/components/ui";
 import { PriorityBadge, StatusBadge } from "@/components/clients/StatusBadge";
+
+// Lazy-loaded so the Excel library only ships to admins who open the importer
+const ClientImport = dynamic(
+  () => import("@/components/clients/ClientImport").then((m) => m.ClientImport),
+  { ssr: false }
+);
 
 const PAGE_SIZE = 15;
 
@@ -30,8 +37,21 @@ function ClientsPageInner() {
   const [employee, setEmployee] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
+  const [importOpen, setImportOpen] = useState(false);
 
   const isManagerial = profile?.role === "admin" || profile?.role === "manager";
+  const isAdmin = profile?.role === "admin";
+
+  const reload = async () => {
+    if (!profile) return;
+    const [c, u] = await Promise.all([
+      fetchClients(profile.role, profile.uid),
+      isManagerial ? fetchUsers() : Promise.resolve([]),
+    ]);
+    setClients(c);
+    setTeam(u);
+    setLoading(false);
+  };
 
   useEffect(() => {
     if (!profile) return;
@@ -99,6 +119,11 @@ function ClientsPageInner() {
           <p className="text-sm text-fg-muted">{filtered.length} of {clients.length} clients</p>
         </div>
         <div className="flex gap-2">
+          {isAdmin && (
+            <Button variant="secondary" onClick={() => setImportOpen(true)}>
+              <Upload className="size-4" /> Import
+            </Button>
+          )}
           {isManagerial && (
             <Button variant="secondary" onClick={doExport}>
               <Download className="size-4" /> Export
@@ -109,6 +134,14 @@ function ClientsPageInner() {
           </Link>
         </div>
       </div>
+
+      {isAdmin && importOpen && (
+        <ClientImport
+          open={importOpen}
+          onClose={() => setImportOpen(false)}
+          onImported={reload}
+        />
+      )}
 
       <div className="card p-4">
         <div className="flex flex-wrap gap-3">

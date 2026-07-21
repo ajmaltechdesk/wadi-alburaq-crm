@@ -15,6 +15,7 @@ import {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
   type QueryConstraint,
 } from "firebase/firestore";
 import { db } from "./firebase";
@@ -124,6 +125,46 @@ export async function updateClient(id: string, data: Partial<Client>): Promise<v
   const patch: Record<string, unknown> = { ...data, updatedAt: serverTimestamp() };
   if (data.name) patch.nameLower = data.name.toLowerCase();
   await updateDoc(doc(db, "clients", id), patch);
+}
+
+/**
+ * Bulk-create clients (Excel/CSV import). Reserves a contiguous block of client
+ * codes in one transaction, then writes rows in batches of 400. Admin-only —
+ * enforced by Firestore rules (managers/admins may create any assignment).
+ */
+export type ClientDraft = Omit<
+  Client,
+  "id" | "clientCode" | "nameLower" | "createdAt" | "updatedAt" | "assignedDate"
+>;
+
+export async function bulkCreateClients(drafts: ClientDraft[]): Promise<number> {
+  if (!drafts.length) return 0;
+
+  const counterRef = doc(db, "counters", "clients");
+  let startSeq = 0;
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(counterRef);
+    startSeq = (snap.data()?.seq as number) ?? 0;
+    tx.set(counterRef, { seq: startSeq + drafts.length }, { merge: true });
+  });
+
+  const CHUNK = 400;
+  for (let i = 0; i < drafts.length; i += CHUNK) {
+    const batch = writeBatch(db);
+    drafts.slice(i, i + CHUNK).forEach((d, j) => {
+      const ref = doc(col.clients());
+      batch.set(ref, {
+        ...d,
+        nameLower: d.name.toLowerCase(),
+        clientCode: nextClientCode(startSeq + i + j + 1),
+        assignedDate: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    });
+    await batch.commit();
+  }
+  return drafts.length;
 }
 
 // ---------- Requirements ----------
