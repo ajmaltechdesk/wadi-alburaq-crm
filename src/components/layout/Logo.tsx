@@ -41,9 +41,9 @@ export function Logo({
           WB
         </div>
       ) : isFull ? (
-        // Dark-background full lockup — chip-less rounded emblem (1:1 source)
+        // Full lockup on a white rounded card (works for white or transparent bg)
         <span
-          className="flex shrink-0 items-center justify-center overflow-hidden rounded-2xl ring-1 ring-white/10"
+          className="flex shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white ring-1 ring-black/5"
         >
           <Image
             src="/logo-full.png"
