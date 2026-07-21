@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Bell, LogOut, Menu, Moon, Search, Sun, UserRound } from "lucide-react";
-import { collection, onSnapshot, orderBy, query, where, limit } from "firebase/firestore";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -22,17 +22,18 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  // Live notifications
+  // Live notifications — where-only query (no composite index), sorted in memory
   useEffect(() => {
     if (!profile) return;
-    const q = query(
-      collection(db, "notifications"),
-      where("userId", "==", profile.uid),
-      orderBy("createdAt", "desc"),
-      limit(15)
-    );
+    const q = query(collection(db, "notifications"), where("userId", "==", profile.uid));
     return onSnapshot(q, (snap) => {
-      setNotifications(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as AppNotification));
+      const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as AppNotification);
+      all.sort((a, b) => {
+        const am = a.createdAt?.toMillis?.() ?? 0;
+        const bm = b.createdAt?.toMillis?.() ?? 0;
+        return bm - am;
+      });
+      setNotifications(all.slice(0, 15));
     });
   }, [profile]);
 
@@ -152,8 +153,8 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
             <span className="flex size-8 items-center justify-center rounded-full bg-linear-to-br from-[#14477d] to-[#17847b] text-xs font-bold text-white">
               {initials(profile?.name)}
             </span>
-            <span className="hidden text-left md:block">
-              <span className="block max-w-32 truncate text-sm font-semibold leading-tight">{profile?.name}</span>
+            <span className="hidden max-w-56 text-left md:block">
+              <span className="block truncate text-sm font-semibold leading-tight">{profile?.name}</span>
               <span className="block text-[11px] capitalize leading-tight text-fg-faint">{profile?.role}</span>
             </span>
           </button>

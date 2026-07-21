@@ -67,11 +67,18 @@ export async function fetchUser(uid: string): Promise<UserProfile | null> {
 }
 
 // ---------- Clients ----------
+/** Millisecond value of a Firestore Timestamp (or 0) for client-side sorting. */
+function ms(t: unknown): number {
+  return t && typeof (t as { toMillis?: () => number }).toMillis === "function"
+    ? (t as { toMillis: () => number }).toMillis()
+    : 0;
+}
+
+// NOTE: employee-scoped reads use `where(...)` only (no `orderBy`) so they do
+// NOT require a Firestore composite index. Results are sorted in memory below.
 export async function fetchClients(role: Role, uid: string): Promise<Client[]> {
-  const snap = await getDocs(
-    query(col.clients(), ...scopeToUser(role, uid), orderBy("createdAt", "desc"))
-  );
-  return snapToList<Client>(snap);
+  const snap = await getDocs(query(col.clients(), ...scopeToUser(role, uid)));
+  return snapToList<Client>(snap).sort((a, b) => ms(b.createdAt) - ms(a.createdAt));
 }
 
 export async function fetchClient(id: string): Promise<Client | null> {
@@ -211,8 +218,10 @@ export async function deleteDocumentMeta(clientId: string, id: string): Promise<
 export async function fetchFollowUps(role: Role, uid: string, clientId?: string): Promise<FollowUp[]> {
   const constraints: QueryConstraint[] = [...scopeToUser(role, uid)];
   if (clientId) constraints.push(where("clientId", "==", clientId));
-  const snap = await getDocs(query(col.followups(), ...constraints, orderBy("date", "desc")));
-  return snapToList<FollowUp>(snap);
+  const snap = await getDocs(query(col.followups(), ...constraints));
+  return snapToList<FollowUp>(snap).sort((a, b) =>
+    (b.date + b.time).localeCompare(a.date + a.time)
+  );
 }
 
 export async function addFollowUp(data: Omit<FollowUp, "id" | "createdAt">): Promise<string> {
@@ -228,8 +237,8 @@ export async function updateFollowUp(id: string, data: Partial<FollowUp>): Promi
 export async function fetchTasks(role: Role, uid: string): Promise<TaskItem[]> {
   const constraints: QueryConstraint[] =
     role === "employee" ? [where("assignedTo", "==", uid)] : [];
-  const snap = await getDocs(query(col.tasks(), ...constraints, orderBy("dueDate")));
-  return snapToList<TaskItem>(snap);
+  const snap = await getDocs(query(col.tasks(), ...constraints));
+  return snapToList<TaskItem>(snap).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 }
 
 export async function addTask(data: Omit<TaskItem, "id" | "createdAt">): Promise<string> {
@@ -245,8 +254,8 @@ export async function updateTask(id: string, data: Partial<TaskItem>): Promise<v
 export async function fetchSales(role: Role, uid: string, clientId?: string): Promise<Sale[]> {
   const constraints: QueryConstraint[] = [...scopeToUser(role, uid)];
   if (clientId) constraints.push(where("clientId", "==", clientId));
-  const snap = await getDocs(query(col.sales(), ...constraints, orderBy("saleDate", "desc")));
-  return snapToList<Sale>(snap);
+  const snap = await getDocs(query(col.sales(), ...constraints));
+  return snapToList<Sale>(snap).sort((a, b) => (b.saleDate || "").localeCompare(a.saleDate || ""));
 }
 
 export async function addSale(data: Omit<Sale, "id" | "createdAt">): Promise<string> {
@@ -260,10 +269,11 @@ export async function updateSale(id: string, data: Partial<Sale>): Promise<void>
 
 // ---------- Notifications ----------
 export async function fetchNotifications(uid: string, max = 50): Promise<AppNotification[]> {
-  const snap = await getDocs(
-    query(col.notifications(), where("userId", "==", uid), orderBy("createdAt", "desc"), fbLimit(max))
-  );
-  return snapToList<AppNotification>(snap);
+  // where-only (no composite index); sort + cap in memory
+  const snap = await getDocs(query(col.notifications(), where("userId", "==", uid)));
+  return snapToList<AppNotification>(snap)
+    .sort((a, b) => ms(b.createdAt) - ms(a.createdAt))
+    .slice(0, max);
 }
 
 export async function pushNotification(
@@ -315,10 +325,15 @@ export async function logAudit(
 }
 
 export async function fetchAuditLogs(role: Role, uid: string, max = 200): Promise<AuditLog[]> {
-  const constraints: QueryConstraint[] =
-    role === "employee" ? [where("userId", "==", uid)] : [];
+  if (role === "employee") {
+    // where-only (no composite index); sort + cap in memory
+    const snap = await getDocs(query(col.auditLogs(), where("userId", "==", uid)));
+    return snapToList<AuditLog>(snap)
+      .sort((a, b) => ms(b.createdAt) - ms(a.createdAt))
+      .slice(0, max);
+  }
   const snap = await getDocs(
-    query(col.auditLogs(), ...constraints, orderBy("createdAt", "desc"), fbLimit(max))
+    query(col.auditLogs(), orderBy("createdAt", "desc"), fbLimit(max))
   );
   return snapToList<AuditLog>(snap);
 }
