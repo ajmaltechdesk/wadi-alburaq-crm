@@ -18,7 +18,7 @@ export function Logo({
   size = 36,
   withText = true,
   variant = "mark",
-  zoom = 1.35,
+  zoom = 1,
   className,
 }: {
   size?: number;
@@ -67,8 +67,8 @@ export function Logo({
             alt="Wadi Al Buraq Tourism"
             fill
             sizes={`${size}px`}
-            className="object-cover"
-            style={{ transform: `scale(${zoom})` }}
+            className="object-contain"
+            style={zoom !== 1 ? { transform: `scale(${zoom})` } : undefined}
             onError={() => setFailed(true)}
             priority
           />
