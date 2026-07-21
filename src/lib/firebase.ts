@@ -22,9 +22,13 @@ export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 
-// Offline persistence for PWA support (multi-tab safe)
+// Offline persistence for PWA support (multi-tab safe).
+// ignoreUndefinedProperties: blank optional form fields are sent as `undefined`;
+// without this, Firestore rejects the whole write ("Unsupported field value:
+// undefined"). This lets those fields simply be omitted.
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+  ignoreUndefinedProperties: true,
 });
 
 export const storage = getStorage(app);
