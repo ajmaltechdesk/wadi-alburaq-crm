@@ -48,8 +48,10 @@ export function Logo({
           <Image
             src="/logo-full.png"
             alt="Wadi Al Buraq Tourism"
-            width={100}
-            height={100}
+            width={size}
+            height={size}
+            sizes={`${size * 2}px`}
+            quality={95}
             className="object-contain"
             style={{ height: size, width: "auto" }}
             onError={() => setFailed(true)}
@@ -66,7 +68,8 @@ export function Logo({
             src="/logo.png"
             alt="Wadi Al Buraq Tourism"
             fill
-            sizes={`${size}px`}
+            sizes={`${size * 2}px`}
+            quality={95}
             className="object-contain"
             style={zoom !== 1 ? { transform: `scale(${zoom})` } : undefined}
             onError={() => setFailed(true)}
