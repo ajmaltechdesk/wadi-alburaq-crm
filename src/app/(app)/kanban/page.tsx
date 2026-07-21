@@ -50,8 +50,8 @@ export default function KanbanPage() {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-5">
-        {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-96" />)}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-64" />)}
       </div>
     );
   }
@@ -63,7 +63,7 @@ export default function KanbanPage() {
         <p className="text-sm text-fg-muted">Drag cards between stages to update client status</p>
       </div>
 
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      <div className="grid grid-cols-1 gap-4 pb-4 sm:grid-cols-2 xl:grid-cols-3">
         {columns.map((col) => (
           <div
             key={col.status}
@@ -76,7 +76,7 @@ export default function KanbanPage() {
               setDragId(null);
             }}
             className={cn(
-              "flex w-72 shrink-0 flex-col rounded-xl border border-border bg-surface-2/50 transition-colors",
+              "flex flex-col rounded-xl border border-border bg-surface-2/50 transition-colors",
               overCol === col.status && "border-primary bg-primary-soft/40"
             )}
           >
@@ -86,7 +86,7 @@ export default function KanbanPage() {
                 {col.items.length}
               </span>
             </div>
-            <div className="flex min-h-32 flex-1 flex-col gap-2 px-3 pb-3">
+            <div className="flex min-h-40 flex-1 flex-col gap-2 px-3 pb-3">
               {col.items.map((c) => (
                 <div
                   key={c.id}
