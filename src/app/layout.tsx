@@ -19,7 +19,8 @@ export const metadata: Metadata = {
   },
   description: "Client & Sales Management Dashboard — WADI AL BURAQ TOURISM L.L.C.",
   manifest: "/manifest.json",
-  icons: { icon: "/logo.png", apple: "/logo.png" },
+  // Favicon + apple-touch icons are provided by src/app/icon.png and
+  // src/app/apple-icon.png (Next.js file-based icon convention).
 };
 
 export const viewport: Viewport = {
