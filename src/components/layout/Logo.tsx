@@ -6,13 +6,14 @@ import { cn } from "@/lib/utils";
 
 /**
  * Company logo.
- *  - variant="mark" → /logo.png       (calligraphy mark, used in sidebar/header)
- *  - variant="full" → /logo-full.png  (full lockup with name, used on login)
+ *  - variant="mark" → /logo.png       (white-background calligraphy mark, sidebar/header)
+ *  - variant="full" → /logo-full.png  (dark-background full lockup with name, login)
  *
- * The source images have a white background, so the image sits on a white
- * rounded chip. This guarantees the navy/teal artwork stays clearly legible in
- * BOTH light and dark mode, and it preserves the original aspect ratio (height
- * is fixed, width scales automatically via object-contain).
+ * The two source images have different backgrounds, so they're framed
+ * differently: the white-background mark sits on a white chip (so it reads
+ * cleanly in dark mode too), while the dark-background full lockup is shown as a
+ * self-contained rounded emblem with no chip. Height is fixed and width scales
+ * automatically (object-contain), preserving each image's aspect ratio.
  */
 export function Logo({
   size = 36,
@@ -26,9 +27,10 @@ export function Logo({
   className?: string;
 }) {
   const [failed, setFailed] = useState(false);
-  const src = variant === "full" ? "/logo-full.png" : "/logo.png";
-  // Intrinsic aspect ratios (mark ≈ 1.24:1, full ≈ 0.95:1) keep next/image happy.
-  const ratio = variant === "full" ? { w: 96, h: 100 } : { w: 124, h: 100 };
+  const isFull = variant === "full";
+  const src = isFull ? "/logo-full.png" : "/logo.png";
+  // Intrinsic aspect ratios: mark ≈ 1.79:1 (2752×1536), full = 1:1 (1024×1024).
+  const ratio = isFull ? { w: 100, h: 100 } : { w: 179, h: 100 };
 
   return (
     <div className={cn("flex min-w-0 items-center gap-2.5", className)}>
@@ -42,8 +44,13 @@ export function Logo({
         </div>
       ) : (
         <span
-          className="flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white ring-1 ring-black/5"
-          style={{ padding: Math.round(size * 0.08) }}
+          className={cn(
+            "flex shrink-0 items-center justify-center overflow-hidden",
+            isFull
+              ? "rounded-2xl ring-1 ring-white/10"
+              : "rounded-lg bg-white ring-1 ring-black/5"
+          )}
+          style={{ padding: isFull ? 0 : Math.round(size * 0.08) }}
         >
           <Image
             src={src}

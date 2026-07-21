@@ -83,7 +83,7 @@ export function Sidebar({
   const nav = (
     <nav className="flex h-full flex-col" aria-label="Main navigation">
       <div className={cn("flex h-16 items-center border-b border-border px-4", collapsed && "justify-center px-2")}>
-        <Logo withText={!collapsed} />
+        <Logo withText={!collapsed} size={collapsed ? 26 : 34} />
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-4">
