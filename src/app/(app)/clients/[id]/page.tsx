@@ -207,40 +207,75 @@ function RequirementsTab({ clientId, client, items, onChange }: {
   const { profile } = useAuth();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const emptyForm = {
     serviceType: SERVICE_TYPES[0], destinationCountry: "", travelDate: "", returnDate: "",
     travellers: "1", budget: "", details: "", expectedClosingDate: "",
     priority: "Medium", status: "Open", employeeNotes: "", internalNotes: "",
-  });
+  };
+  const [form, setForm] = useState(emptyForm);
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const openAdd = () => {
+    setEditingId(null);
+    setForm(emptyForm);
+    setOpen(true);
+  };
+
+  const openEdit = (r: Requirement) => {
+    setEditingId(r.id);
+    setForm({
+      serviceType: r.serviceType,
+      destinationCountry: r.destinationCountry ?? "",
+      travelDate: r.travelDate ?? "",
+      returnDate: r.returnDate ?? "",
+      travellers: r.travellers != null ? String(r.travellers) : "",
+      budget: r.budget != null ? String(r.budget) : "",
+      details: r.details ?? "",
+      expectedClosingDate: r.expectedClosingDate ?? "",
+      priority: r.priority,
+      status: r.status,
+      employeeNotes: r.employeeNotes ?? "",
+      internalNotes: r.internalNotes ?? "",
+    });
+    setOpen(true);
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profile) return;
     setBusy(true);
+    const payload = {
+      clientId,
+      assignedEmployeeId: client.assignedEmployeeId,
+      serviceType: form.serviceType,
+      destinationCountry: form.destinationCountry || undefined,
+      travelDate: form.travelDate || undefined,
+      returnDate: form.returnDate || undefined,
+      travellers: form.travellers ? Number(form.travellers) : undefined,
+      budget: form.budget ? Number(form.budget) : undefined,
+      details: form.details || undefined,
+      expectedClosingDate: form.expectedClosingDate || undefined,
+      priority: form.priority as Requirement["priority"],
+      status: form.status as Requirement["status"],
+      employeeNotes: form.employeeNotes || undefined,
+      internalNotes: form.internalNotes || undefined,
+    };
     try {
-      await addRequirement(clientId, {
-        clientId,
-        assignedEmployeeId: client.assignedEmployeeId,
-        serviceType: form.serviceType,
-        destinationCountry: form.destinationCountry || undefined,
-        travelDate: form.travelDate || undefined,
-        returnDate: form.returnDate || undefined,
-        travellers: form.travellers ? Number(form.travellers) : undefined,
-        budget: form.budget ? Number(form.budget) : undefined,
-        details: form.details || undefined,
-        expectedClosingDate: form.expectedClosingDate || undefined,
-        priority: form.priority as Requirement["priority"],
-        status: form.status as Requirement["status"],
-        employeeNotes: form.employeeNotes || undefined,
-        internalNotes: form.internalNotes || undefined,
-      });
-      await logAudit(profile, "create", "requirement", clientId, undefined, form.serviceType);
-      toast.success("Requirement added");
+      if (editingId) {
+        await updateRequirement(clientId, editingId, payload);
+        await logAudit(profile, "update", "requirement", clientId, undefined, form.serviceType);
+        toast.success("Requirement updated");
+      } else {
+        await addRequirement(clientId, payload);
+        await logAudit(profile, "create", "requirement", clientId, undefined, form.serviceType);
+        toast.success("Requirement added");
+      }
       setOpen(false);
+      setEditingId(null);
       onChange();
     } catch {
-      toast.error("Failed to add requirement");
+      toast.error(editingId ? "Failed to update requirement" : "Failed to add requirement");
     } finally {
       setBusy(false);
     }
@@ -252,7 +287,7 @@ function RequirementsTab({ clientId, client, items, onChange }: {
   return (
     <div className="space-y-3">
       <div className="flex justify-end">
-        <Button onClick={() => setOpen(true)}><Plus className="size-4" /> Add Requirement</Button>
+        <Button onClick={openAdd}><Plus className="size-4" /> Add Requirement</Button>
       </div>
       {items.length === 0 ? (
         <div className="card"><EmptyState title="No requirements yet" hint="Record what this client needs — visa, tickets, packages…" /></div>
@@ -277,7 +312,7 @@ function RequirementsTab({ clientId, client, items, onChange }: {
                 {r.expectedClosingDate && <div><dt className="text-xs text-fg-faint">Expected Closing</dt><dd>{fmtDate(r.expectedClosingDate)}</dd></div>}
               </dl>
               {r.details && <p className="mt-2 text-sm text-fg-muted">{r.details}</p>}
-              <div className="mt-3 flex gap-2 border-t border-border pt-3">
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
                 {(["Open", "In Progress", "Won", "Lost"] as const).filter((s) => s !== r.status).map((s) => (
                   <button
                     key={s}
@@ -291,13 +326,19 @@ function RequirementsTab({ clientId, client, items, onChange }: {
                     Mark {s}
                   </button>
                 ))}
+                <button
+                  onClick={() => openEdit(r)}
+                  className="ml-auto flex cursor-pointer items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary-soft"
+                >
+                  <Pencil className="size-3.5" /> Edit
+                </button>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Add Requirement" wide>
+      <Modal open={open} onClose={() => setOpen(false)} title={editingId ? "Edit Requirement" : "Add Requirement"} wide>
         <form onSubmit={submit} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Service Type" required>
@@ -331,7 +372,7 @@ function RequirementsTab({ clientId, client, items, onChange }: {
           </div>
           <div className="flex justify-end gap-3">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button type="submit" loading={busy}>Add Requirement</Button>
+            <Button type="submit" loading={busy}>{editingId ? "Save Changes" : "Add Requirement"}</Button>
           </div>
         </form>
       </Modal>
